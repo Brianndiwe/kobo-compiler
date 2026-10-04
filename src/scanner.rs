@@ -86,6 +86,7 @@ impl Scanner {
             }
 
             c if c.is_ascii_digit() => self.number(),
+            c if c.is_ascii_alphabetic() || c == '_' => self.identifier(),
             _ => {}
         }
     }
@@ -114,10 +115,21 @@ impl Scanner {
     }
 
     fn identifier(&mut self) {
-        // TODO(you): scan an identifier, then decide whether it is a keyword; keyword() in
-        //            token.rs does the lookup (1.2, 1.3).
-        todo!("identifier")
+        while self.peek().is_ascii_alphanumeric() || self.peek() == '_' {
+            self.advance();
+        }
+
+        // Read the complete lexeme before looking it up as a keyword.
+        let text: String = self.src[self.start..self.current]
+            .iter()
+            .collect();
+
+        match keyword(&text) {
+            Some(kind) => self.add(kind),
+            None => self.add(TokenType::Identifier),
+        }
     }
+
 
     // --- primitives ---------------------------------------------------------------
 
