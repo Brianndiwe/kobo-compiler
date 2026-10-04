@@ -88,7 +88,8 @@ impl Scanner {
             c if c.is_ascii_digit() => self.number(),
             c if c.is_ascii_alphabetic() || c == '_' => self.identifier(),
             '"' => self.string(),
-            _ => {}
+            _ => self.error(self.line, "Character is not part of any token."),
+
         }
     }
 
