@@ -42,10 +42,13 @@ impl Parser {
     // --- declarations and statements ------------------------------------------------
 
     fn declaration(&mut self) -> Parsed<Stmt> {
-        // TODO(you): spec 3.1: a declaration is a fun, a var, or a statement. This is also
-        //            where an error is caught and synchronise() runs.
-        // TEMPORARY: lets the rules below run until you write this one.
-        self.statement()
+        if self.matches(&[TokenType::Fun]) {
+            self.fun_declaration()
+        } else if self.matches(&[TokenType::Var]) {
+            self.var_declaration()
+        } else {
+            self.statement()
+        }
     }
 
     fn fun_declaration(&mut self) -> Parsed<Stmt> {
