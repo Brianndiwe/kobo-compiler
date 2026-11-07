@@ -419,21 +419,7 @@ impl Parser {
     /// Discard tokens until just past a `;`, or on a keyword that can only begin a
     /// statement (spec section 5.2). It always steps over at least one token first: a
     /// recovery that could stand still would hang on the token that caused the error.
-    fn synchronise(&mut self) {
-        // TODO(you): spec 5.2: after an error, discard tokens until just past a ';' or on a
-        //            statement keyword, so one mistake costs one message.
-        // TEMPORARY: lets the rules below run until you write this one.
-        self.depth = 0;
-        while !self.at_end() {
-            self.current += 1;
-            if self.previous().kind == TokenType::Semicolon {
-                return;
-            }
-        }
-    }
-
-    /// Wraps a value as a literal node carrying the line of the token just consumed.
-    fn synchronise(&mut self) {
+    ffn synchronise(&mut self) {
         self.depth = 0;
         if self.at_end() {
             return;
@@ -457,6 +443,14 @@ impl Parser {
             }
 
             self.current += 1;
+        }
+    }
+
+    /// Wraps a value as a literal node carrying the line of the token just consumed.
+    fn literal(&self, value: Value) -> Expr {
+        Expr::Literal {
+            value,
+            line: self.previous().line,
         }
     }
 
