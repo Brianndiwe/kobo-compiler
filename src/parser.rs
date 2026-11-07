@@ -419,7 +419,7 @@ impl Parser {
     /// Discard tokens until just past a `;`, or on a keyword that can only begin a
     /// statement (spec section 5.2). It always steps over at least one token first: a
     /// recovery that could stand still would hang on the token that caused the error.
-    ffn synchronise(&mut self) {
+    fn synchronise(&mut self) {
         self.depth = 0;
         if self.at_end() {
             return;
