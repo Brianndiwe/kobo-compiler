@@ -331,7 +331,7 @@ impl Parser {
 
         Ok(expr)
     }
-    
+
     fn unary(&mut self) -> Parsed<Expr> {
         if self.matches(&[TokenType::Bang, TokenType::Minus]) {
             let op = self.previous();
@@ -347,10 +347,31 @@ impl Parser {
 
     /// A loop, not recursion: `f(1)(2)` is one callee called twice.
     fn call(&mut self) -> Parsed<Expr> {
-        // TODO(you): spec 3.2: call -> primary ( '(' arguments? ')' )*. That is a loop, not
-        //            recursion; f(1)(2) is one callee called twice.
-        // TEMPORARY: lets the rules below run until you write this one.
-        self.primary()
+        let mut expr = self.primary()?;
+
+        loop {
+            if self.matches(&[TokenType::LParen]) {
+                let mut args = Vec::new();
+                if !self.check(TokenType::RParen) {
+                    loop {
+                        args.push(self.expression()?);
+                        if !self.matches(&[TokenType::Comma]) {
+                            break;
+                        }
+                    }
+                }
+                let paren = self.consume(TokenType::RParen, "Expect ')' after arguments.")?;
+                expr = Expr::Call {
+                    callee: Box::new(expr),
+                    paren,
+                    args,
+                };
+            } else {
+                break;
+            }
+        }
+
+        Ok(expr)
     }
 
     fn primary(&mut self) -> Parsed<Expr> {
