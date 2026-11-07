@@ -210,10 +210,25 @@ impl Parser {
     /// `a = 1` and `a + 1` start the same way, so the left side is parsed as an ordinary
     /// expression and checked when the `=` arrives (spec section 3.2).
     fn assignment(&mut self) -> Parsed<Expr> {
-        // TODO(you): spec 3.2. The left side parses as an ordinary expression and is checked
-        //            afterwards, because the rule is not LL(1).
-        // TEMPORARY: lets the rules below run until you write this one.
-        self.or()
+        let expr = self.or()?;
+
+        if self.matches(&[TokenType::Equal]) {
+            let equals = self.previous();
+            let value = self.assignment()?;
+
+            if let Expr::Variable { name, at } = expr {
+                return Ok(Expr::Assign {
+                    name,
+                    value: Box::new(value),
+                    at,
+                });
+            }
+
+            self.error_at(&equals, "Cannot assign to this expression.");
+            return Err(());
+        }
+
+        Ok(expr)
     }
 
     fn or(&mut self) -> Parsed<Expr> {
