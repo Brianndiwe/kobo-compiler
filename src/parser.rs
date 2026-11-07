@@ -109,6 +109,11 @@ impl Parser {
 
     fn statement(&mut self) -> Parsed<Stmt> {
         self.depth += 1;
+        if self.depth > MAX_NESTING {
+            self.error("Too deeply nested.");
+            self.depth -= 1;
+            return Err(());
+        }
         let result = self.statement_inner();
         self.depth -= 1;
         result
