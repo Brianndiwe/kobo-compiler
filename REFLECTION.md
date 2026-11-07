@@ -1,16 +1,48 @@
-# Q1
-Fractional numbers
+# Reflection - CA2: The Parser
 
-The scanner decides that a . begins a fractional part only when it is immediately followed by a digit. This decision is made in src/scanner.rs:84, where the condition checks both self.peek() == '.' and self.peek_next().is_ascii_digit(). This is important because a dot by itself is not a token in Kobo. For example, when the input is 5., number() first consumes the 5. The condition at src/scanner.rs:84 then fails because the dot is not followed by a digit. Therefore, the dot is not consumed as part of the number. The scanner adds 5 as a Number token and later processes the . separately. The _ arm at src/scanner.rs:66 reports the dot as an invalid character. This matches section 1.4 because a fractional number must contain digits after the decimal point. In contrast, 5.25 passes the condition, consumes the dot and 25, and becomes one Number token.
+## 1. Dangling Else Resolution
+The dangling `else` in an `if` statement is resolved in `src/parser.rs:164` inside the `if_statement` method:
+```rust
+let else_branch = if self.matches(&[TokenType::Else]) {
+    Some(Box::new(self.statement()?))
+} else {
+    None
+};
+```
 
-# Q2
- Line counting and EOF
+This behavior is determined entirely by recursive descent rather than explicit grammar rules. As soon as if_statement finishes parsing the then_branch statement, it immediately checks if the next token is else. Because of this greedy matching order, an else naturally binds to the closest preceding unmatched if.   For the input if (false) if (true) print "a"; else print "b";, our parser produces:(if false (if true (print "a") (print "b")))
+If the else bound to the outer if instead, it would print:(if false (if true (print "a")) (print "b"))Commit where it was incorrect/missing: c23ed27 (if stmt impl) where todo!("if_statement") was still present:todo!("if_statement")Commit where it was fixed: c23ed27 (or updated in ae396b3):let else_branch = if self.matches(&[TokenType::Else]) { Some(Box::new(self.statement()?)) } else { None };
 
-The scanner changes the line counter in two places. A normal newline is handled at src/scanner.rs:45, where self.line += 1 is executed. Newlines inside strings are handled at src/scanner.rs:72, where the same increment occurs while the string is being scanned. These are the only places where the scanner changes its line counter. EOF does not simply use self.line. Instead, run() gets the line from the last real token at src/scanner.rs:20-22: self.tokens.last().map(|token| token.line).unwrap_or(1). Therefore, if a file ends with two blank lines, EOF carries the line number of the last real token rather than the final physical line of the file. Section 6.1 requires this because EOF represents the end of the scanned token stream, not an additional token located on every trailing blank line. Using self.line directly would incorrectly move EOF forward when the source ends with blank lines.
+## 2. Assignment Expression Verification
+Assignment is checked in src/parser.rs:215 within the assignment method:
 
-# Q3
-A failed test and what I learned
+```rust
+if let Expr::Variable { name, at } = expr {
+    return Ok(Expr::Assign { name, value: Box::new(value), at, });
+}
+self.error_at(&equals, "Cannot assign to this expression.");
+return Err(());
+```
 
-One test I encountered during the implementation was a test involving number literals and decimal points. I initially had to pay particular attention to the 5. case because it is different from a normal decimal such as 5.25. I learned that the scanner must not consume the decimal point until it has confirmed that a digit follows it. The important line is src/scanner.rs:84, where both peek() and peek_next() are checked before the dot is consumed. This helped me understand that scanner implementations depend heavily on lookahead and on consuming characters only after the complete token rule has been confirmed.
+This check cannot happen before parsing the left side because assignment syntax in Kobo is not LL(1)—an expression like a or a.b or f() starts identically during token lookahead. The parser must first parse the left side as an ordinary expression, and only when the = token is encountered does it look back to verify if the left-hand side is a valid assignable target (a bare variable).   For the input 1 = 2;, this produces the exact section 5.1 error message:
+[line 1] Error at '=': Cannot assign to this expression.   Commit where it was incorrect/missing: 3692e47 (assignment impl) initial stub:self.or()Commit where it was fixed: 3692e47 (updated in ae396b3):if let Expr::Variable { name, at } = expr { return Ok(Expr::Assign { name, value: Box::new(value), at, }); }
 
-I did not have Git commits from the earlier stages of my work, so I cannot truthfully provide two commit hashes or quote the exact old and new lines from my own Git history. I have not invented hashes because they would not exist in my repository. My main lesson from this task is that I should commit working stages as I develop the scanner so that my changes and mistakes can be traced accurately.
+## 3. Error Synchronisation
+The synchronisation logic is implemented in src/parser.rs:420 inside synchronise:
+
+```rust
+fn synchronise(&mut self) {
+    self.depth = 0;
+    if self.at_end() { return; }
+    self.current += 1;
+    while !self.at_end() {
+        if self.previous().kind == TokenType::Semicolon { return; }
+        match self.peek().kind {
+            TokenType::Fun | TokenType::Var | TokenType::If | TokenType::While | TokenType::Print | TokenType::Return => return,
+            _ => {}
+        }
+        self.current += 1;
+    }
+}
+```
+synchronise stops on either a semicolon (immediately consuming past it) or on statement-boundary keywords (fun, var, if, while, print, return). It always steps over at least one token first to guarantee progress and prevent infinite loops on invalid input.   If you delete the call to synchronise() in parse(), a syntax error (such as a missing semicolon or malformed statement) will fail to recover, causing cascading parse errors where a single typo generates dozens of error messages instead of one. For instance, in an invalid test file with multiple statements following a syntax error, the output balloons into numerous redundant "Expect expression." or "Expect ';'" errors.   Commit where it was incorrect/missing: b64f41d (synchronise impl) initial simple loop:while !self.at_end() { self.current += 1; if self.previous().kind == TokenType::Semicolon { return; } }Commit where it was fixed: 740eaee (real synchronise impl replaced 'ffn' with fn):fn synchronise(&mut self) {
