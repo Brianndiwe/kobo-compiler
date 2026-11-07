@@ -51,7 +51,7 @@ impl Parser {
         }
     }
 
-    fn fun_declaration(&mut self) -> Parsed<Stmt> {
+   fn fun_declaration(&mut self) -> Parsed<Stmt> {
         let name_token = self.consume(TokenType::Identifier, "Expect function name.")?;
         let name = name_token.lexeme.clone();
 
