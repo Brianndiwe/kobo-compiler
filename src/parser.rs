@@ -433,10 +433,30 @@ impl Parser {
     }
 
     /// Wraps a value as a literal node carrying the line of the token just consumed.
-    fn literal(&self, value: Value) -> Expr {
-        Expr::Literal {
-            value,
-            line: self.previous().line,
+    fn synchronise(&mut self) {
+        self.depth = 0;
+        if self.at_end() {
+            return;
+        }
+
+        self.current += 1;
+
+        while !self.at_end() {
+            if self.previous().kind == TokenType::Semicolon {
+                return;
+            }
+
+            match self.peek().kind {
+                TokenType::Fun
+                | TokenType::Var
+                | TokenType::If
+                | TokenType::While
+                | TokenType::Print
+                | TokenType::Return => return,
+                _ => {}
+            }
+
+            self.current += 1;
         }
     }
 
