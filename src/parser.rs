@@ -120,19 +120,19 @@ impl Parser {
     }
 
     fn statement_inner(&mut self) -> Parsed<Stmt> {
-        // TODO(you): spec 3.1: pick the statement by its leading token.
-        // TEMPORARY: lets the rules below run until you write this one.
-        // Named, so an `if` is not misreported as a broken expression.
-        if self.check(TokenType::LBrace) || self.check(TokenType::If)
-            || self.check(TokenType::While) || self.check(TokenType::Return)
-        {
-            self.error("This statement form is not written yet.");
-            return Err(());
-        }
-        if self.matches(&[TokenType::Print]) {
+        if self.matches(&[TokenType::If]) {
+            self.if_statement()
+        } else if self.matches(&[TokenType::While]) {
+            self.while_statement()
+        } else if self.matches(&[TokenType::Return]) {
+            self.return_statement()
+        } else if self.matches(&[TokenType::Print]) {
             let value = self.expression()?;
             self.consume(TokenType::Semicolon, "Expect ';' after value.")?;
             Ok(Stmt::Print(value))
+        } else if self.matches(&[TokenType::LBrace]) {
+            let body = self.block()?;
+            Ok(Stmt::Block { body, locals: 0 })
         } else {
             let expr = self.expression()?;
             self.consume(TokenType::Semicolon, "Expect ';' after expression.")?;
