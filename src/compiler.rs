@@ -62,16 +62,204 @@ impl<'a> Compiler<'a> {
     // --- statements -------------------------------------------------------------------
 
     fn statement(&mut self, stmt: &Stmt) {
-        // TODO(you): emit code for one statement.
-        todo!("statement")
+        match stmt {
+            Stmt::Expression(e) => {
+                let line = self.expression(e);
+                self.chunk.write(Op::Pop, line);
+            }
+            Stmt::Print(e) => {
+                let line = self.expression(e);
+                self.chunk.write(Op::Print, line);
+            }
+            Stmt::Var {
+                name,
+                initialiser,
+                slot,
+            } => {
+                let line = match initialiser {
+                    Some(e) => self.expression(e),
+                    None => {
+                        self.chunk.write(Op::Nil, name.line);
+                        name.line
+                    }
+                };
+                self.declare(&name.lexeme, *slot, line);
+            }
+            Stmt::Block { body, locals } => {
+                self.statements(body);
+                self.end_scope(*locals);
+            }
+            Stmt::Function { index, name, slot } => {
+                let f = &self.program.functions[*index];
+                let line = f.line;
+                let k = self.chunk.constant(Value::Function {
+                    index: *index,
+                    name: name.clone(),
+                });
+                self.chunk.write(Op::Constant(k), line);
+                self.declare(name, *slot, line);
+            }
+            Stmt::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                let cond_line = self.expression(condition);
+                let jif = self.chunk.write(Op::JumpIfFalse(0), cond_line);
+                self.chunk.write(Op::Pop, cond_line);
+
+                self.statement(then_branch);
+
+                let jmp = self.chunk.write(Op::Jump(0), cond_line);
+                self.patch(jif);
+                self.chunk.write(Op::Pop, cond_line);
+
+                if let Some(else_stmt) = else_branch {
+                    self.statement(else_stmt);
+                }
+
+                self.patch(jmp);
+            }
+            Stmt::While { condition, body } => {
+                let start = self.chunk.code.len();
+                let cond_line = self.expression(condition);
+                let exit = self.chunk.write(Op::JumpIfFalse(0), cond_line);
+                self.chunk.write(Op::Pop, cond_line);
+
+                self.statement(body);
+
+                let back_line = self.chunk.last_line();
+                self.chunk.write(Op::Jump(start), back_line);
+                self.patch(exit);
+                self.chunk.write(Op::Pop, cond_line);
+            }
+            Stmt::Return(v) => {
+                let line = match v {
+                    Some(e) => self.expression(e),
+                    None => self.chunk.last_line(),
+                };
+                if v.is_none() {
+                    self.chunk.write(Op::Nil, line);
+                }
+                self.chunk.write(Op::Return, line);
+            }
+        }
     }
 
     // --- expressions ------------------------------------------------------------------
 
     /// Emit `expr`, and return the line for the caller's next instruction.
     fn expression(&mut self, expr: &Expr) -> usize {
-        // TODO(you): emit code for one expression, and return the line it came from.
-        todo!("expression")
+        match expr {
+            Expr::Literal { value, line } => {
+                match value {
+                    Value::Nil => self.chunk.write(Op::Nil, *line),
+                    Value::Bool(true) => self.chunk.write(Op::True, *line),
+                    Value::Bool(false) => self.chunk.write(Op::False, *line),
+                    _ => {
+                        let k = self.chunk.constant(value.clone());
+                        self.chunk.write(Op::Constant(k), *line)
+                    }
+                };
+                *line
+            }
+            Expr::Grouping(inner) => self.expression(inner),
+            Expr::Variable { name, at } => {
+                let line = name.line;
+                match at {
+                    Resolved::Local { slot, .. } => {
+                        self.chunk.write(Op::GetLocal(*slot), line);
+                    }
+                    Resolved::Global => {
+                        let k = self.name_constant(&name.lexeme);
+                        self.chunk.write(Op::GetGlobal(k), line);
+                    }
+                }
+                line
+            }
+            Expr::Assign { name, value, at } => {
+                self.expression(value);
+                let line = name.line;
+                match at {
+                    Resolved::Local { slot, .. } => {
+                        self.chunk.write(Op::SetLocal(*slot), line);
+                    }
+                    Resolved::Global => {
+                        let k = self.name_constant(&name.lexeme);
+                        self.chunk.write(Op::SetGlobal(k), line);
+                    }
+                }
+                line
+            }
+            Expr::Unary { op, right } => {
+                self.expression(right);
+                let line = op.line;
+                match op.kind {
+                    TokenType::Minus => {
+                        self.chunk.write(Op::Negate, line);
+                    }
+                    TokenType::Bang => {
+                        self.chunk.write(Op::Not, line);
+                    }
+                    _ => unreachable!(),
+                }
+                line
+            }
+            Expr::Binary { left, op, right } => {
+                self.expression(left);
+                self.expression(right);
+                let line = op.line;
+                let instr = match op.kind {
+                    TokenType::Plus => Op::Add,
+                    TokenType::Minus => Op::Subtract,
+                    TokenType::Star => Op::Multiply,
+                    TokenType::Slash => Op::Divide,
+                    TokenType::Greater => Op::Greater,
+                    TokenType::GreaterEqual => Op::GreaterEqual,
+                    TokenType::Less => Op::Less,
+                    TokenType::LessEqual => Op::LessEqual,
+                    TokenType::EqualEqual => Op::Equal,
+                    TokenType::BangEqual => Op::NotEqual,
+                    _ => unreachable!(),
+                };
+                self.chunk.write(instr, line);
+                line
+            }
+            Expr::Logical { left, op, right } => {
+                let line = self.expression(left);
+                match op.kind {
+                    TokenType::Or => {
+                        let jif = self.chunk.write(Op::JumpIfFalse(0), line);
+                        let end = self.chunk.write(Op::Jump(0), line);
+                        self.patch(jif);
+                        self.chunk.write(Op::Pop, line);
+                        self.expression(right);
+                        self.patch(end);
+                    }
+                    TokenType::And => {
+                        let end = self.chunk.write(Op::JumpIfFalse(0), line);
+                        self.chunk.write(Op::Pop, line);
+                        self.expression(right);
+                        self.patch(end);
+                    }
+                    _ => unreachable!(),
+                }
+                line
+            }
+            Expr::Call {
+                callee,
+                paren,
+                args,
+            } => {
+                self.expression(callee);
+                for arg in args {
+                    self.expression(arg);
+                }
+                let line = paren.line;
+                self.chunk.write(Op::Call(args.len()), line);
+                line
+            }
+        }
     }
 
     // --- names ------------------------------------------------------------------------
@@ -79,9 +267,10 @@ impl<'a> Compiler<'a> {
     /// A global is written into the globals map. A local is already on the stack in the
     /// slot the resolver gave it, so declaring one emits nothing.
     fn declare(&mut self, name: &str, slot: Option<usize>, line: usize) {
-        // TODO(you): a global is written into the globals map; a local is already on the stack
-        //            in the slot resolver.rs gave it, so it emits nothing.
-        todo!("declare")
+        if slot.is_none() {
+            let k = self.name_constant(name);
+            self.chunk.write(Op::DefineGlobal(k), line);
+        }
     }
 
     fn name_constant(&mut self, name: &str) -> usize {
@@ -90,13 +279,17 @@ impl<'a> Compiler<'a> {
 
     /// Leaving a scope pops its locals, one `Pop` each; the count is on the `Block`.
     fn end_scope(&mut self, locals: usize) {
-        // TODO(you): leave a scope: one Pop per local that dies here, and the resolver already
-        //            counted them onto the Block.
-        todo!("end_scope")
+        let line = self.chunk.last_line();
+        for _ in 0..locals {
+            self.chunk.write(Op::Pop, line);
+        }
     }
 
     fn patch(&mut self, at: usize) {
-        // TODO(you): fill in a forward jump, whose target was not known when it was emitted.
-        todo!("patch")
+        let target = self.chunk.code.len();
+        match &mut self.chunk.code[at] {
+            Op::Jump(dst) | Op::JumpIfFalse(dst) => *dst = target,
+            _ => unreachable!(),
+        }
     }
 }
