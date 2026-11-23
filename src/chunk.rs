@@ -33,6 +33,7 @@ pub enum Op {
     Subtract,
     Multiply,
     Divide,
+    Power,
     Not,
     Negate,
     Print,

@@ -8,6 +8,7 @@ pub enum TokenType {
     RBrace,
     Comma,
     Semicolon,
+    Caret,
 
     Plus,
     Minus,
@@ -54,6 +55,7 @@ impl TokenType {
             TokenType::RBrace => "RBRACE",
             TokenType::Comma => "COMMA",
             TokenType::Semicolon => "SEMICOLON",
+            TokenType::Caret => "CARET",
 
             TokenType::Plus => "PLUS",
             TokenType::Minus => "MINUS",

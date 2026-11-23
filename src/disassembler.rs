@@ -51,6 +51,7 @@ fn instruction(c: &Chunk, op: Op) -> String {
         Op::Subtract => "SUBTRACT".to_string(),
         Op::Multiply => "MULTIPLY".to_string(),
         Op::Divide => "DIVIDE".to_string(),
+        Op::Power => "POWER".to_string(),
         Op::Not => "NOT".to_string(),
         Op::Negate => "NEGATE".to_string(),
         Op::Print => "PRINT".to_string(),

@@ -214,6 +214,7 @@ impl<'a> Compiler<'a> {
                     TokenType::Minus => Op::Subtract,
                     TokenType::Star => Op::Multiply,
                     TokenType::Slash => Op::Divide,
+                    TokenType::Caret => Op::Power,
                     TokenType::Greater => Op::Greater,
                     TokenType::GreaterEqual => Op::GreaterEqual,
                     TokenType::Less => Op::Less,

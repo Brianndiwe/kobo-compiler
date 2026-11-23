@@ -27,8 +27,8 @@ struct Scanner {
 impl Scanner {
     fn run(&mut self) {
         while !self.at_end() {
-        self.start = self.current;
-        self.scan_token();
+            self.start = self.current;
+            self.scan_token();
         }
 
         let eof_line = self.tokens.last()
@@ -40,7 +40,6 @@ impl Scanner {
             lexeme: String::new(),
             line: eof_line,
         });
-        
     }
 
     fn scan_token(&mut self) {
@@ -54,6 +53,7 @@ impl Scanner {
             '}' => self.add(TokenType::RBrace),
             ',' => self.add(TokenType::Comma),
             ';' => self.add(TokenType::Semicolon),
+            '^' => self.add(TokenType::Caret),
             '+' => self.add(TokenType::Plus),
             '-' => self.add(TokenType::Minus),
             '*' => self.add(TokenType::Star),
@@ -113,7 +113,6 @@ impl Scanner {
             c if c.is_ascii_alphabetic() || c == '_' => self.identifier(),
             '"' => self.string(),
             _ => self.error(self.line, "Character is not part of any token."),
-
         }
     }
 
@@ -169,7 +168,6 @@ impl Scanner {
             None => self.add(TokenType::Identifier),
         }
     }
-
 
     // --- primitives ---------------------------------------------------------------
 

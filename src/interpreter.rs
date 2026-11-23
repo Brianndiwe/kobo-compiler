@@ -185,6 +185,7 @@ fn evaluate(expr: &Expr, env: &mut Environment, program: &Program) -> Exec<Value
                         Ok(Value::Number(a / b))
                     }
                 }
+                TokenType::Caret => arith(l, r, op.line, f64::powf),
                 TokenType::Greater => compare(l, r, op.line, |a, b| a > b),
                 TokenType::GreaterEqual => compare(l, r, op.line, |a, b| a >= b),
                 TokenType::Less => compare(l, r, op.line, |a, b| a < b),

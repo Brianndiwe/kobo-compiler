@@ -125,6 +125,7 @@ impl Vm {
                     }
                     self.stack.push(Value::Number(a / b));
                 }
+                Op::Power => self.arith(line, f64::powf)?,
                 Op::Not => {
                     let truthy = self.pop().is_truthy();
                     self.stack.push(Value::Bool(!truthy));
