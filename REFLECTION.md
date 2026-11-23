@@ -1,48 +1,10 @@
-# Reflection - CA2: The Parser
+# Reflection
 
-## 1. Dangling Else Resolution
-The dangling `else` in an `if` statement is resolved in `src/parser.rs:164` inside the `if_statement` method:
-```rust
-let else_branch = if self.matches(&[TokenType::Else]) {
-    Some(Box::new(self.statement()?))
-} else {
-    None
-};
-```
+## 1. Short-Circuiting `and` and `or`
+In `src/interpreter.rs: 150` for `TokenType::Or` and `src/interpreter.rs: 156` for `TokenType::And`, logical expressions evaluate their left operand and return an operand value rather than forcing a boolean[cite: 26]. Evaluating `nil or "fallback"` returns `"fallback"` because `nil` is falsey in Kobo, so evaluation moves to the right operand and yields `"fallback"`[cite: 26]. Evaluating `0 and 1` returns `1` because `0` is truthy in Kobo, so `and` evaluates and returns the right operand[cite: 26]. Returning `true` or `false` instead would still pass tests that only test truthiness—such as `if` or `while` conditions, or expressions whose values are already booleans. However, it would fail tests that print or use the yielded operand directly, such as `print nil or "fallback";`, which must print `fallback` rather than `true`.
 
-This behavior is determined entirely by recursive descent rather than explicit grammar rules. As soon as if_statement finishes parsing the then_branch statement, it immediately checks if the next token is else. Because of this greedy matching order, an else naturally binds to the closest preceding unmatched if.   For the input if (false) if (true) print "a"; else print "b";, our parser produces:(if false (if true (print "a") (print "b")))
-If the else bound to the outer if instead, it would print:(if false (if true (print "a")) (print "b"))Commit where it was incorrect/missing: c23ed27 (if stmt impl) where todo!("if_statement") was still present:todo!("if_statement")Commit where it was fixed: c23ed27 (or updated in ae396b3):let else_branch = if self.matches(&[TokenType::Else]) { Some(Box::new(self.statement()?)) } else { None };
+## 2. Name Resolution and `end_scope`
+Name lookup is at `src/resolver.rs: 76`[cite: 28], and block cleanup in the compiler is at `src/compiler.rs: 228`[cite: 24]. Resolving names to stack slots at compile time makes the VM faster than the tree walk because the resolver works out which stack slot a binding uses once before execution, letting the VM index `stack[base + slot]` directly[cite: 28, 31]. By contrast, the tree-walking interpreter searches scopes dynamically every time a statement or expression runs[cite: 26]. If `end_scope` emits one `Pop` too few, a dead local stays on the stack, leaving every later slot in that frame off by one and corrupting loops or nested blocks[cite: 24, 31]. Phase 4 catches this bug because it runs the bytecode VM, whereas Phase 3 does not because the tree walk does not use that emitted `Pop`[cite: 24, 26, 31].
 
-## 2. Assignment Expression Verification
-Assignment is checked in src/parser.rs:215 within the assignment method:
-
-```rust
-if let Expr::Variable { name, at } = expr {
-    return Ok(Expr::Assign { name, value: Box::new(value), at, });
-}
-self.error_at(&equals, "Cannot assign to this expression.");
-return Err(());
-```
-
-This check cannot happen before parsing the left side because assignment syntax in Kobo is not LL(1)—an expression like a or a.b or f() starts identically during token lookahead. The parser must first parse the left side as an ordinary expression, and only when the = token is encountered does it look back to verify if the left-hand side is a valid assignable target (a bare variable).   For the input 1 = 2;, this produces the exact section 5.1 error message:
-[line 1] Error at '=': Cannot assign to this expression.   Commit where it was incorrect/missing: 3692e47 (assignment impl) initial stub:self.or()Commit where it was fixed: 3692e47 (updated in ae396b3):if let Expr::Variable { name, at } = expr { return Ok(Expr::Assign { name, value: Box::new(value), at, }); }
-
-## 3. Error Synchronisation
-The synchronisation logic is implemented in src/parser.rs:420 inside synchronise:
-
-```rust
-fn synchronise(&mut self) {
-    self.depth = 0;
-    if self.at_end() { return; }
-    self.current += 1;
-    while !self.at_end() {
-        if self.previous().kind == TokenType::Semicolon { return; }
-        match self.peek().kind {
-            TokenType::Fun | TokenType::Var | TokenType::If | TokenType::While | TokenType::Print | TokenType::Return => return,
-            _ => {}
-        }
-        self.current += 1;
-    }
-}
-```
-synchronise stops on either a semicolon (immediately consuming past it) or on statement-boundary keywords (fun, var, if, while, print, return). It always steps over at least one token first to guarantee progress and prevent infinite loops on invalid input.   If you delete the call to synchronise() in parse(), a syntax error (such as a missing semicolon or malformed statement) will fail to recover, causing cascading parse errors where a single typo generates dozens of error messages instead of one. For instance, in an invalid test file with multiple statements following a syntax error, the output balloons into numerous redundant "Expect expression." or "Expect ';'" errors.   Commit where it was incorrect/missing: b64f41d (synchronise impl) initial simple loop:while !self.at_end() { self.current += 1; if self.previous().kind == TokenType::Semicolon { return; } }Commit where it was fixed: 740eaee (real synchronise impl replaced 'ffn' with fn):fn synchronise(&mut self) {
+## 3. Exponentiation Extension (`^`)
+The `^` extension spans `src/token.rs: 12` (`Caret` in `TokenType`), `src/scanner.rs: 51` (scanning `'^'` into `TokenType::Caret`), `src/parser.rs: 275` (`power` rule), `src/interpreter.rs: 191` (`TokenType::Caret` arm), `src/chunk.rs: 33` (`Op::Power` variant), `src/disassembler.rs: 54` (`Op::Power` disassembly arm), `src/compiler.rs: 168` (`TokenType::Caret` mapped to `Op::Power`), and `src/vm.rs: 118` (`Op::Power` arm)[cite: 23, 24, 25, 26, 27, 29, 30, 31]. The bytecode path was harder because adding `Op::Power` forced a disassembler arm and required the chunk, compiler, and VM to agree before `--vm` worked[cite: 23, 24, 25, 31]. Evaluating `-2 ^ 2` gives `-4` because `unary` calls `power`, so `^` binds tighter than unary minus and applies the minus to the result[cite: 27]. I do not have a before-and-after commit pair like that in my history, so I am citing `4efae9a` as the commit containing the fix; before that change `unary` called `self.call()` instead of `self.power()`, and after it `unary` calls `self.power()`[cite: 27].
