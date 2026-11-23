@@ -67,6 +67,30 @@ impl Scanner {
                 };
                 self.add(t);
             }
+            '=' => {
+                let t = if self.matches('=') {
+                    TokenType::EqualEqual
+                } else {
+                    TokenType::Equal
+                };
+                self.add(t);
+            }
+            '<' => {
+                let t = if self.matches('=') {
+                    TokenType::LessEqual
+                } else {
+                    TokenType::Less
+                };
+                self.add(t);
+            }
+            '>' => {
+                let t = if self.matches('=') {
+                    TokenType::GreaterEqual
+                } else {
+                    TokenType::Greater
+                };
+                self.add(t);
+            }
 
             // Whitespace
             ' ' | '\r' | '\t' => {}

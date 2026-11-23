@@ -7,7 +7,18 @@ pub fn resolve(program: &mut Program) {
     // TODO(you): spec 7, 'The resolver': walk every function body in its own frame (4.3), then
     //            the script. A function's body sees its own scopes and the globals and nothing
     //            between.
-    todo!("resolve")
+    for f in &mut program.functions {
+        let mut r = Resolver::default();
+        r.depth = 1;
+        for param in &f.params {
+            r.declare(param);
+            r.define(param);
+        }
+        r.statements(&mut f.body);
+    }
+
+    let mut r = Resolver::default();
+    r.statements(&mut program.stmts);
 }
 
 struct Local {
@@ -33,26 +44,52 @@ impl Resolver {
     fn end_scope(&mut self) -> usize {
         // TODO(you): close a scope and report how many locals died in it, which is how many
         //            Pops the bytecode compiler owes.
-        todo!("end_scope")
+        let before = self.locals.len();
+        self.locals.retain(|l| l.scope != self.depth);
+        self.depth -= 1;
+        before - self.locals.len()
     }
 
     fn declare(&mut self, name: &str) {
         // TODO(you): introduce a binding that is not usable yet; its own initialiser must not
         //            see it (4.2).
-        todo!("declare")
+        if self.depth == 0 {
+            return;
+        }
+        self.locals.push(Local {
+            name: name.to_string(),
+            scope: self.depth,
+            initialised: false,
+        });
     }
 
     /// `None` at the top level of the script, where a declaration is a global.
     fn define(&mut self, name: &str) -> Option<usize> {
         // TODO(you): make it usable, and hand back its stack slot.
-        todo!("define")
+        if self.depth == 0 {
+            return None;
+        }
+        let i = self
+            .locals
+            .iter()
+            .rposition(|l| l.name == name && !l.initialised)?;
+        self.locals[i].initialised = true;
+        Some(i)
     }
 
     /// Innermost first, so the nearest declaration wins and an outer one stays shadowed.
     fn lookup(&self, name: &str) -> Resolved {
         // TODO(you): innermost binding first, skipping any still initialising. A name that
         //            matches no local is a global (spec 7).
-        todo!("lookup")
+        for (i, l) in self.locals.iter().enumerate().rev() {
+            if l.initialised && l.name == name {
+                return Resolved::Local {
+                    depth: self.depth - l.scope,
+                    slot: i,
+                };
+            }
+        }
+        Resolved::Global
     }
 
     fn statements(&mut self, stmts: &mut [Stmt]) {
